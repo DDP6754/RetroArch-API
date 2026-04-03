@@ -14,7 +14,6 @@ __pycache__/
 
 # Almacenamiento de archivos (Storage)
 # Ignoramos el contenido pero conservamos la carpeta si queremos
-storage/covers/*
 storage/roms/*
 storage/games/saves/*
 storage/games/states/*

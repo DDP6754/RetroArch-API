@@ -20,7 +20,7 @@ class Consola(Base):
     __tablename__ = "consolas"
     id = Column(Integer, primary_key=True, index=True)
     console = Column(String, unique=True)
-    emulador = Column(String)
+    ruta_emulador = Column(String, nullable=True)
     
     juegos = relationship("Juego", back_populates="consola_rel")
 
@@ -28,17 +28,17 @@ class Juego(Base):
     __tablename__ = "juegos"
     id = Column(Integer, primary_key=True, index=True)
     juego = Column(String)
-    Subtitulo = Column(String)
-    imagen = Column(String, nullable=True) 
     ruta_rom = Column(String, nullable=True)
-    
     consola_id = Column(Integer, ForeignKey("consolas.id"))
     perfil_id = Column(Integer, ForeignKey("perfiles.id"))
+
+    consola_rel = relationship("Consola", back_populates="juegos")
+    perfil_propietario = relationship("Perfil", back_populates="juegos")
 
 class Save(Base):
     __tablename__ = "saves"
     id = Column(Integer, primary_key=True, index=True)
-    save = Column(String)
+    ruta_save = Column(String)
     
     juego_id = Column(Integer, ForeignKey("juegos.id"))
     perfil_id = Column(Integer, ForeignKey("perfiles.id"))
@@ -46,7 +46,7 @@ class Save(Base):
 class Savestate(Base):
     __tablename__ = "savestates"
     id = Column(Integer, primary_key=True, index=True)
-    savestate = Column(String)
+    ruta_savestate = Column(String)
     
     juego_id = Column(Integer, ForeignKey("juegos.id"))
     perfil_id = Column(Integer, ForeignKey("perfiles.id"))
@@ -54,4 +54,4 @@ class Savestate(Base):
 async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    print("Base de datos sincronizada.")
+    print("Base de datos sincronizada (Campos actualizados a ruta_).")

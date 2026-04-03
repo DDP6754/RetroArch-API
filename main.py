@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-from routers import usuarios, catalogo, partidas
+from routers import scrapper, usuarios, catalogo, partidas
 from database import init_db
 from contextlib import asynccontextmanager
 
@@ -17,3 +17,4 @@ app.mount("/storage", StaticFiles(directory="storage"), name="storage")
 app.include_router(usuarios.router)
 app.include_router(catalogo.router)
 app.include_router(partidas.router)
+app.include_router(scrapper.router)

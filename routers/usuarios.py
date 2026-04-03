@@ -15,10 +15,10 @@ async def registrar_usuario(usuario: str, contrasena: str, db: AsyncSession = De
     **Registro oficial de nuevos usuarios.**
 
     Este endpoint crea un perfil persistente en el sistema.
-    - **usuario**: El nombre que usara el jugador para loguearse.
-    - **contrasena**: Password en texto plano (se recomienda cifrar en el futuro).
+    - **usuario**: El nombre único que usará el jugador para identificarse.
+    - **contrasena**: Password para la cuenta (actualmente almacenada en texto plano).
     
-    *Retorna el objeto del perfil con su ID generado por la base de datos.*
+    *Retorna el objeto del perfil con su ID generado automáticamente.*
     """
     result = await db.execute(select(Perfil).filter(Perfil.usuario == usuario))
     existe = result.scalars().first()
@@ -41,8 +41,13 @@ async def login(usuario: str, contrasena: str, db: AsyncSession = Depends(get_db
     """
     **Acceso de usuarios registrados.**
 
-    Verifica que el nombre y la clave coincidan con un registro existente.
-    - **Retorno**: Un JSON con el `usuario_id` necesario para peticiones privadas.
+    Punto de entrada principal para la autenticación.
+    - **usuario / contrasena**: Credenciales enviadas por el usuario.
+    
+    **Uso en Frontend:** Es vital guardar el `usuario_id` devuelto en el almacenamiento local (localStorage o sessionStorage). 
+    Este ID será necesario para todas las peticiones posteriores (descargar juegos, ver biblioteca o subir partidas).
+    
+    - **Retorno**: Un JSON con el mensaje de éxito y el `usuario_id`.
     """
     result = await db.execute(select(Perfil).filter(Perfil.usuario == usuario))
     user_db = result.scalars().first()
@@ -60,7 +65,8 @@ async def obtener_perfil(usuario_id: int, db: AsyncSession = Depends(get_db)):
     """
     **Consulta de datos de perfil.**
 
-    Muestra la informacion basica de un usuario segun su ID.
+    Obtiene la información pública o básica de un usuario.
+    - **usuario_id**: El identificador numérico único del perfil.
     """
     result = await db.execute(select(Perfil).filter(Perfil.id == usuario_id))
     perfil = result.scalars().first()
