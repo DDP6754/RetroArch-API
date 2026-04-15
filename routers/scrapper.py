@@ -1,5 +1,6 @@
 import zipfile
 import httpx
+import os
 from pathlib import Path
 from urllib.parse import unquote
 from sqlalchemy.future import select
@@ -18,13 +19,7 @@ HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 @router.get("/scraper/listar/{sistema}")
 async def listar_juegos_remotos(sistema: str):
-    """
-    **Obtener catálogo externo disponible para descargar.**
-    
-    Escanea los repositorios remotos (Archive.org) y devuelve una lista de juegos listos para ser bajados.
-    - **sistema**: Debe ser 'gba', 'ds' o 'gamecube'.
-    - **Retorno**: Un objeto con el nombre del juego, la URL de origen y el nombre del archivo real.
-    """
+    """Obtener catálogo externo disponible para descargar."""
     if sistema not in SISTEMAS_URLS:
         raise HTTPException(status_code=404, detail="Sistema no configurado")
     
@@ -47,24 +42,7 @@ async def listar_juegos_remotos(sistema: str):
 
 @router.websocket("/ws/descargar/{consola_nombre}")
 async def websocket_descargar(websocket: WebSocket, consola_nombre: str):
-    """
-    **Gestor de descargas en tiempo real (WebSocket).**
-    
-    Maneja la descarga del juego, la descompresión y el registro en la base de datos.
-    
-    **Protocolo de comunicación:**
-    1. El cliente se conecta y envía un JSON: 
-       `{"url": "...", "nombre": "...", "perfil_id": ...}`
-    2. El servidor responde con estados:
-       - `{"status": "descargando", "progreso": 50.5}`
-       - `{"status": "extrayendo", "mensaje": "..."}`
-       - `{"status": "completado", "ruta_rom": "..."}`
-       - `{"status": "error", "mensaje": "..."}`
-
-    **Lógica Inteligente:**
-    Si el archivo ya existe en el servidor (descargado por otro usuario), no se baja de nuevo; 
-    simplemente se vincula al nuevo `perfil_id` para ahorrar espacio.
-    """
+    """WebSocket para descarga de juegos con progreso en MB y descompresión."""
     await websocket.accept()
     
     async with AsyncSessionLocal() as db:
@@ -74,71 +52,74 @@ async def websocket_descargar(websocket: WebSocket, consola_nombre: str):
             nombre_juego = data.get("nombre")
             perfil_id = data.get("perfil_id")
 
-            res_c = await db.execute(
-                select(Consola).where(Consola.console == consola_nombre.lower())
-            )
+            res_c = await db.execute(select(Consola).where(Consola.console == consola_nombre.lower()))
             consola = res_c.scalars().first()
             if not consola:
-                await websocket.send_json({"status": "error", "mensaje": f"La consola '{consola_nombre}' no existe."})
-                return
-
-            res_u = await db.execute(
-                select(Juego).where(Juego.juego == nombre_juego, Juego.perfil_id == perfil_id)
-            )
-            if res_u.scalars().first():
-                await websocket.send_json({"status": "error", "mensaje": "Ya tienes este juego en tu biblioteca."})
+                await websocket.send_json({"status": "error", "mensaje": f"Consola '{consola_nombre}' no existe."})
                 return
 
             nombre_archivo_url = url_descarga.split('/')[-1]
             ruta_base = Path(f"./storage/roms/{consola_nombre}")
             ruta_base.mkdir(parents=True, exist_ok=True)
-
-            res_f = await db.execute(
-                select(Juego).where(Juego.ruta_rom.contains(nombre_archivo_url))
-            )
-            juego_previo = res_f.scalars().first()
+            
+            ext = nombre_archivo_url.split('.')[-1].lower()
+            nombre_seguro = "".join(c for c in nombre_juego if c.isalnum() or c in (' ', '_', '-')).strip()
+            ruta_temp = ruta_base / f"{nombre_seguro}.{ext}"
             
             ruta_final = None
 
-            if juego_previo and Path(juego_previo.ruta_rom).exists():
-                ruta_final = juego_previo.ruta_rom
-                await websocket.send_json({
-                    "status": "descargando", 
-                    "progreso": 100, 
-                    "mensaje": "Archivo encontrado en el servidor. Vinculando..."
-                })
-            else:
-                ext = nombre_archivo_url.split('.')[-1].lower()
-                nombre_seguro = "".join(c for c in nombre_juego if c.isalnum() or c in (' ', '_', '-')).strip()
-                ruta_temp = ruta_base / f"{nombre_seguro}.{ext}"
+            async with httpx.AsyncClient(follow_redirects=True, timeout=None) as client:
+                async with client.stream("GET", url_descarga, headers=HEADERS) as r:
+                    if r.status_code != 200:
+                        await websocket.send_json({"status": "error", "mensaje": "Error de conexión con la fuente."})
+                        return
+                    
+                    total_bytes = int(r.headers.get("Content-Length", 0))
+                    descargado_bytes = 0
+                    
+                    with open(ruta_temp, "wb") as f:
+                        async for chunk in r.aiter_bytes(chunk_size=131072): # 128KB chunks
+                            f.write(chunk)
+                            descargado_bytes += len(chunk)
+                            
+                            # Cálculos de progreso y MB
+                            progreso = round((descargado_bytes / total_bytes) * 100, 2) if total_bytes > 0 else 0
+                            descargado_mb = round(descargado_bytes / (1024 * 1024), 2)
+                            total_mb = round(total_bytes / (1024 * 1024), 2)
 
-                async with httpx.AsyncClient(follow_redirects=True, timeout=None) as client:
-                    async with client.stream("GET", url_descarga, headers=HEADERS) as r:
-                        if r.status_code != 200:
-                            await websocket.send_json({"status": "error", "mensaje": "Error de conexión con la fuente."})
+                            await websocket.send_json({
+                                "status": "descargando", 
+                                "progreso": progreso,
+                                "descargado_mb": descargado_mb,
+                                "total_mb": total_mb
+                            })
+
+            ruta_final = str(ruta_temp)
+
+
+            if ext == "zip":
+                await websocket.send_json({"status": "extrayendo", "mensaje": "Descomprimiendo y limpiando..."})
+                try:
+                    with zipfile.ZipFile(ruta_temp, 'r') as z:
+                        nombres = z.namelist()
+                        z.extractall(ruta_base)
+                        
+                        if nombres:
+                            archivo_elegido = nombres[0]
+                            ruta_final = str(ruta_base / archivo_elegido)
+                            
+                            for archivo in nombres[1:]:
+                                ruta_sobrante = ruta_base / archivo
+                                if ruta_sobrante.exists():
+                                    ruta_sobrante.unlink() 
+                        else:
+                            await websocket.send_json({"status": "error", "mensaje": "ZIP vacío"})
                             return
                             
-                        total = int(r.headers.get("Content-Length", 0))
-                        descargado = 0
-                        with open(ruta_temp, "wb") as f:
-                            async for chunk in r.aiter_bytes(chunk_size=131072):
-                                f.write(chunk)
-                                descargado += len(chunk)
-                                progreso = round((descargado / total) * 100, 2) if total > 0 else 0
-                                await websocket.send_json({"status": "descargando", "progreso": progreso})
-
-                ruta_final = str(ruta_temp)
-
-                if ext == "zip":
-                    await websocket.send_json({"status": "extrayendo", "mensaje": "Descomprimiendo..."})
-                    try:
-                        with zipfile.ZipFile(ruta_temp, 'r') as z:
-                            z.extractall(ruta_base)
-                            ruta_final = str(ruta_base / z.namelist()[0])
-                        ruta_temp.unlink()
-                    except Exception as e:
-                        await websocket.send_json({"status": "error", "mensaje": f"Error al extraer: {str(e)}"})
-                        return
+                    ruta_temp.unlink()
+                except Exception as e:
+                    await websocket.send_json({"status": "error", "mensaje": f"Error: {str(e)}"})
+                    return
 
             nuevo_registro = Juego(
                 juego=nombre_juego,
@@ -152,7 +133,7 @@ async def websocket_descargar(websocket: WebSocket, consola_nombre: str):
             
             await websocket.send_json({
                 "status": "completado", 
-                "mensaje": "Juego añadido a tu biblioteca.",
+                "mensaje": "Juego listo en tu biblioteca.",
                 "ruta_rom": str(ruta_final)
             })
 

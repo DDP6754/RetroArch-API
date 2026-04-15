@@ -2,45 +2,141 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>ROM Downloader</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RetroArch Cloud - Descargador</title>
     <style>
-        body { font-family: sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; background: #f4f4f9; }
-        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-        .progress-container { width: 100%; background: #ddd; height: 30px; border-radius: 15px; margin: 20px 0; overflow: hidden; }
-        #progress-bar { width: 0%; height: 100%; background: #4caf50; transition: width 0.1s; }
-        #status { font-weight: bold; color: #555; }
-        input, button { width: 100%; padding: 10px; margin: 5px 0; border: 1px solid #ccc; border-radius: 4px; }
-        button { background: #007bff; color: white; border: none; cursor: pointer; }
-        button:hover { background: #0056b3; }
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            max-width: 600px; 
+            margin: 50px auto; 
+            padding: 20px; 
+            background: #1a1a2e; 
+            color: white;
+        }
+        .card { 
+            background: #16213e; 
+            padding: 30px; 
+            border-radius: 12px; 
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5); 
+        }
+        h2 { text-align: center; color: #4ecca3; margin-top: 0; }
+        
+        .input-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-size: 0.9em; color: #95a5a6; }
+        
+        input { 
+            width: 100%; 
+            padding: 12px; 
+            border: 1px solid #0f3460; 
+            border-radius: 6px; 
+            background: #0f3460; 
+            color: white; 
+            box-sizing: border-box;
+        }
+        
+        button { 
+            width: 100%; 
+            padding: 15px; 
+            background: #4ecca3; 
+            color: #1a1a2e; 
+            border: none; 
+            border-radius: 6px; 
+            font-weight: bold; 
+            cursor: pointer; 
+            font-size: 1em;
+            transition: background 0.3s;
+        }
+        button:hover { background: #45b393; }
+
+        .progress-container { 
+            width: 100%; 
+            background: #0f3460; 
+            height: 25px; 
+            border-radius: 12px; 
+            margin: 25px 0 10px 0; 
+            overflow: hidden; 
+            display: none; /* Se muestra al iniciar */
+        }
+        #progress-bar { 
+            width: 0%; 
+            height: 100%; 
+            background: #4ecca3; 
+            transition: width 0.2s; 
+        }
+        
+        #status { 
+            text-align: center; 
+            font-size: 0.9em; 
+            color: #bdc3c7; 
+            margin-top: 10px;
+        }
+        .stats { font-weight: bold; color: #4ecca3; }
     </style>
 </head>
 <body>
-    <div class="card">
-        <h2>Descargador de ROMs</h2>
-        <input type="text" id="sistema" placeholder="Sistema (gba, ds, gamecube)" value="gba">
-        <input type="text" id="nombre" placeholder="Nombre del juego">
-        <input type="text" id="url" placeholder="URL de descarga (obtenida del /listar)">
-        <button onclick="iniciarDescarga()">Empezar Descarga</button>
 
-        <div class="progress-container">
+    <div class="card">
+        <h2>ROM Downloader</h2>
+        
+        <div class="input-group">
+            <label>ID de Perfil (Login ID)</label>
+            <input type="number" id="perfil_id" placeholder="Ej: 1" value="1">
+        </div>
+
+        <div class="input-group">
+            <label>Sistema</label>
+            <input type="text" id="sistema" placeholder="gba, ds, gamecube" value="gba">
+        </div>
+
+        <div class="input-group">
+            <label>Nombre del Juego</label>
+            <input type="text" id="nombre" placeholder="Ej: Pokemon Emerald">
+        </div>
+
+        <div class="input-group">
+            <label>URL de Descarga</label>
+            <input type="text" id="url" placeholder="URL directa de Archive.org">
+        </div>
+
+        <button onclick="iniciarDescarga()">INICIAR TRANSFERENCIA</button>
+
+        <div class="progress-container" id="p-container">
             <div id="progress-bar"></div>
         </div>
-        <p id="status">Esperando instrucciones...</p>
+        
+        <p id="status">Listo para descargar</p>
     </div>
 
     <script>
         function iniciarDescarga() {
+            const perfilId = document.getElementById('perfil_id').value;
             const sistema = document.getElementById('sistema').value;
             const nombre = document.getElementById('nombre').value;
             const url = document.getElementById('url').value;
+            
             const bar = document.getElementById('progress-bar');
+            const container = document.getElementById('p-container');
             const status = document.getElementById('status');
+
+            if(!url || !nombre) {
+                alert("Por favor, rellena el nombre y la URL");
+                return;
+            }
+
+            // UI Reset
+            container.style.display = "block";
+            bar.style.width = "0%";
+            bar.style.background = "#4ecca3";
+            status.innerText = "Conectando con el servidor...";
 
             const ws = new WebSocket(`ws://localhost:8000/ws/descargar/${sistema}`);
 
             ws.onopen = () => {
-                status.innerText = "Conectado. Enviando datos...";
-                ws.send(JSON.stringify({ nombre: nombre, url: url }));
+                ws.send(JSON.stringify({ 
+                    nombre: nombre, 
+                    url: url, 
+                    perfil_id: parseInt(perfilId) 
+                }));
             };
 
             ws.onmessage = (event) => {
@@ -48,20 +144,32 @@
                 
                 if (data.status === "descargando") {
                     bar.style.width = data.progreso + "%";
-                    status.innerText = `Descargando: ${data.progreso}% (${data.descargado_mb}MB / ${data.total_mb}MB)`;
+                    // Mostramos el porcentaje y los Megabytes recibidos del backend
+                    status.innerHTML = `Descargando: <span class="stats">${data.progreso}%</span><br>(${data.descargado_mb} MB / ${data.total_mb} MB)`;
                 } 
+                else if (data.status === "extrayendo") {
+                    bar.style.background = "#f1c40f";
+                    status.innerText = "📦 " + data.mensaje;
+                }
                 else if (data.status === "completado") {
                     bar.style.width = "100%";
-                    bar.style.background = "#28a745";
-                    status.innerText = "¡Descarga completada con éxito!";
+                    bar.style.background = "#2ecc71";
+                    status.innerHTML = `✅ <span style="color:#2ecc71">${data.mensaje}</span>`;
                 }
                 else if (data.status === "error") {
-                    status.innerText = "Error: " + data.mensaje;
-                    bar.style.background = "#dc3545";
+                    status.innerHTML = `❌ <span style="color:#e74c3c">Error: ${data.mensaje}</span>`;
+                    bar.style.background = "#e74c3c";
                 }
             };
 
-            ws.onclose = () => { console.log("Conexión cerrada"); };
+            ws.onclose = () => {
+                console.log("Conexión cerrada");
+            };
+
+            ws.onerror = (err) => {
+                status.innerText = "Error de conexión WebSocket";
+                console.error(err);
+            };
         }
     </script>
 </body>
