@@ -2,15 +2,13 @@ import asyncio
 from sqlalchemy.future import select
 from database import AsyncSessionLocal, Consola, init_db
 
-# Definición de las consolas iniciales basadas en tu Scrapper
 CONSOLAS_INICIALES = [
-    {"console": "gba", "emulador": "mgba_libretro.so"},
-    {"console": "ds", "emulador": "desmume_libretro.so"},
-    {"console": "gamecube", "emulador": "dolphin_libretro.so"}
+    {"console": "gba", "emulador": "/ruta/emulador/gba"},
+    {"console": "ds", "emulador": "/ruta/emulador/ds"},
+    {"console": "gamecube", "emulador": "/ruta/emulador/gamecube"}
 ]
 
 async def populate():
-    # 1. Asegurarse de que las tablas existan
     print("Verificando tablas...")
     await init_db()
 
@@ -18,7 +16,6 @@ async def populate():
         print("Insertando consolas iniciales...")
         
         for data in CONSOLAS_INICIALES:
-            # Verificar si la consola ya existe por su nombre técnico (console)
             query = await db.execute(
                 select(Consola).where(Consola.console == data["console"])
             )

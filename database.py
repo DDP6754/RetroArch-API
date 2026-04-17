@@ -28,12 +28,14 @@ class Juego(Base):
     __tablename__ = "juegos"
     id = Column(Integer, primary_key=True, index=True)
     juego = Column(String)
-    ruta_rom = Column(String, nullable=True)
+    archivo_origen = Column(String, index=True)
+    ruta_rom = Column(String)
+
     consola_id = Column(Integer, ForeignKey("consolas.id"))
     perfil_id = Column(Integer, ForeignKey("perfiles.id"))
 
-    consola_rel = relationship("Consola", back_populates="juegos")
     perfil_propietario = relationship("Perfil", back_populates="juegos")
+    consola_rel = relationship("Consola", back_populates="juegos")
 
 class Save(Base):
     __tablename__ = "saves"

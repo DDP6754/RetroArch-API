@@ -1,33 +1,22 @@
-# Entorno virtual
 venv/
 .venv/
 env/
-
-# Python (Archivos temporales de ejecución)
 __pycache__/
 *.py[cod]
 *$py.class
 
-# Base de datos local
 *.db
 *.sqlite3
 
-# Almacenamiento de archivos (Storage)
-# Ignoramos el contenido pero conservamos la carpeta si queremos
 storage/roms/*
 storage/games/saves/*
 storage/games/states/*
 
-# Exceptuamos archivos .gitkeep si quieres mantener las carpetas vacías en Git
 !storage/**/.gitkeep
 
-# Jupyter Notebooks temporales
 .ipynb_checkpoints/
 
-# Variables de entorno (Seguridad)
 .env
 
-# TEST
 test.py
 test_db.ipynb
-populate_db.py
