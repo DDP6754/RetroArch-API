@@ -1,9 +1,12 @@
 import time
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from sqlalchemy.orm import joinedload
 from pathlib import Path
 from database import AsyncSessionLocal, Consola, Juego
+import os
 
 router = APIRouter(tags=["Catalogo"])
 
@@ -43,33 +46,11 @@ async def añadir_consola(
     if res.scalars().first():
         raise HTTPException(status_code=400, detail="La consola ya existe")
 
-    nueva_consola = Consola(console=nombre.lower(), emulador=emulador)
+    nueva_consola = Consola(console=nombre.lower(), ruta_emulador=emulador)
     db.add(nueva_consola)
     await db.commit()
     await db.refresh(nueva_consola)
     return nueva_consola
-
-@router.get("/consolas/{consola_id}/juegos")
-async def listar_juegos_por_consola(consola_id: int, db: AsyncSession = Depends(get_db)):
-    """
-    **Listar juegos filtrados por consola.**
-    
-    Muestra todos los juegos registrados bajo un ID de consola específico, sin importar a qué usuario pertenezcan. 
-    Útil para vistas de administrador o catálogos globales.
-    """
-    res_juegos = await db.execute(select(Juego).filter(Juego.consola_id == consola_id))
-    return res_juegos.scalars().all()
-
-@router.get("/juegos/buscar")
-async def buscar_juego(nombre: str = Query(..., min_length=2), db: AsyncSession = Depends(get_db)):
-    """
-    **Buscador global de juegos.**
-    
-    Realiza una búsqueda parcial (insensible a mayúsculas) en toda la base de datos.
-    - **nombre**: El texto a buscar (mínimo 2 caracteres).
-    """
-    result = await db.execute(select(Juego).filter(Juego.juego.ilike(f"%{nombre}%")))
-    return result.scalars().all()
 
 @router.post("/juegos", status_code=status.HTTP_201_CREATED)
 async def añadir_juego_manual(
@@ -111,20 +92,37 @@ async def añadir_juego_manual(
     return nuevo_juego
 
 @router.get("/mi-biblioteca/{perfil_id}")
-async def listar_mis_juegos_detallado(perfil_id: int, db: AsyncSession = Depends(get_db)):
+async def listar_mis_juegos_detallado(
+    perfil_id: int, 
+    search: Optional[str] = Query(None, description="Filtrar juegos por nombre"),
+    db: AsyncSession = Depends(get_db)
+):
     """
-    **Obtener la biblioteca privada del usuario.**
-    
-    Este es el endpoint principal para la vista de "Mis Juegos".
-    Filtra la base de datos para devolver únicamente los juegos que pertenecen al `perfil_id` enviado.
-    Incluye el nombre de la consola (`consola`) y la `ruta` directa para cargar la ROM en el emulador.
+    ### Obtener Catálogo Personal del Usuario
+    Recupera la lista de juegos vinculados a un perfil específico.
+
+    **Parámetros:**
+    - `perfil_id` (path): ID único del perfil/usuario.
+    - `search` (query): [Opcional] Filtra los resultados por coincidencia parcial en el título (insensible a mayúsculas).
+
+    **Comportamiento:**
+    - Si se omite `search`, devuelve la biblioteca completa del usuario.
+    - Si se incluye `search`, busca el patrón dentro de los nombres de los juegos.
+    - Realiza un **JOIN** con la tabla de consolas para devolver el nombre del sistema.
+
+    **Respuesta:**
+    - Retorna un `Array` de objetos con `id`, `titulo`, `consola` y la `ruta` física del archivo.
     """
-    from sqlalchemy.orm import joinedload
-    result = await db.execute(
+    query = (
         select(Juego)
         .options(joinedload(Juego.consola_rel))
         .where(Juego.perfil_id == perfil_id)
     )
+
+    if search:
+        query = query.where(Juego.juego.ilike(f"%{search}%"))
+
+    result = await db.execute(query)
     juegos = result.scalars().all()
     
     return [
@@ -135,3 +133,34 @@ async def listar_mis_juegos_detallado(perfil_id: int, db: AsyncSession = Depends
             "ruta": j.ruta_rom
         } for j in juegos
     ]
+
+@router.delete("/juegos/desvincular/{juego_id}")
+async def desvincular_juego(juego_id: int, perfil_id: int):
+    async with AsyncSessionLocal() as db:
+        res = await db.execute(
+            select(Juego).where(Juego.id == juego_id, Juego.perfil_id == perfil_id)
+        )
+        juego_a_borrar = res.scalars().first()
+
+        if not juego_a_borrar:
+            raise HTTPException(status_code=404, detail="El juego no existe en tu biblioteca")
+
+        ruta_archivo = juego_a_borrar.ruta_rom
+        archivo_origen = juego_a_borrar.archivo_origen
+
+        await db.delete(juego_a_borrar)
+        await db.commit()
+
+        res_otros = await db.execute(
+            select(Juego).where(Juego.archivo_origen == archivo_origen)
+        )
+        otro_usuario_lo_tiene = res_otros.scalars().first()
+
+        if not otro_usuario_lo_tiene:
+            if ruta_archivo and os.path.exists(ruta_archivo):
+                os.remove(ruta_archivo)
+
+        return {
+            "status": "success",
+            "mensaje": f"Juego desvinculado de tu perfil"
+        }
