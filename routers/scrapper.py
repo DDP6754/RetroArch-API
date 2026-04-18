@@ -17,7 +17,7 @@ SISTEMAS_URLS = {
 
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
-@router.get("/scraper/buscar")
+@router.get("/scrapper/buscar")
 async def buscar_juegos_global(
     search: str = Query(..., min_length=3),
     page: int = Query(1, ge=1),
@@ -65,6 +65,60 @@ async def buscar_juegos_global(
         "total_paginas": (total + size - 1) // size,
         "juegos": juegos_paginados
     }
+
+# @router.get("/scrapper/descargar/{consola}/{juego}")
+# async def descargar_juegos(
+#     consola: str,
+#     juego: str,
+#     page: int = Query(1, ge=1),
+#     size: int = Query(20, ge=1, le=100)
+# ):
+#     """
+#     Busca un juego en el sistema y lo descarga.
+#     """
+#     resultados_globales = []
+#     exts = [".zip", ".nds", ".gba", ".rvz", ".iso", ".sfc", ".nes"]
+#     
+#     async with httpx.AsyncClient(follow_redirects=True, timeout=30.0) as client:
+#         for sistema, url_base in SISTEMAS_URLS.items():
+#             try:
+#                 response = await client.get(url_base, headers=HEADERS)
+#                 if response.status_code != 200: continue
+#                 
+#                 soup = BeautifulSoup(response.text, 'html.parser')
+#                 links = soup.find_all('a')
+#                 i = 0
+#                 # for link in soup.find_all('a'):
+#                 #     print(link)
+#                 #     href = link.get('href')
+#                 #     if href and any(href.lower().endswith(e) for e in exts) and not href.startswith(('?', '/')):
+#                 #         nombre_limpio = unquote(href).rsplit('.', 1)[0]
+#                 #         
+#                 #         if juego.lower() in nombre_limpio.lower():
+#                 #             resultados_globales.append({
+#                 #                 "nombre": nombre_limpio,
+#                 #                 "url_descarga": f"{url_base}{href}",
+#                 #                 "consola": sistema
+#                 #             })
+#
+#             except Exception as e:
+#                 print(f"Error en {sistema}: {e}")
+#                 continue
+#
+#     total = len(resultados_globales)
+#     start = (page - 1) * size
+#     end = start + size
+#     
+#     juegos_paginados = resultados_globales[start:end]
+#
+#     return {
+#         "busqueda": juego,
+#         "total_resultados": total,
+#         "pagina_actual": page,
+#         "tamaño_pagina": size,
+#         "total_paginas": (total + size - 1) // size,
+#         "juegos": juegos_paginados
+#     }
 
 @router.websocket("/ws/descargar/{consola_nombre}")
 async def websocket_descargar(websocket: WebSocket, consola_nombre: str):
