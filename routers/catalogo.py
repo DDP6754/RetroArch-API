@@ -6,6 +6,7 @@ from sqlalchemy.future import select
 from sqlalchemy.orm import joinedload
 from pathlib import Path
 from database import AsyncSessionLocal, Consola, Juego
+import subprocess
 import os
 
 router = APIRouter(tags=["Catalogo"])
@@ -164,3 +165,66 @@ async def desvincular_juego(juego_id: int, perfil_id: int):
             "status": "success",
             "mensaje": f"Juego desvinculado de tu perfil"
         }
+
+@router.get("/mi-biblioteca/{perfil_id}/{juego_id}")
+async def listar_juego_perfil(
+    juego_id: int, 
+    perfil_id: int, 
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    ### Obtener Juego de Catálogo Personal del Usuario
+
+    **Parámetros:**
+    - `juego_id` (path): ID único del juego.
+    - `perfil_id` (path): ID único del perfil.
+
+    **Comportamiento:**
+    - Obtiene el juego asociado a un perfil concreto
+
+    **Respuesta:**
+    - JSON asociado al juego de un perfil concreto
+    """
+
+    query = (
+        select(Juego)
+        .options(joinedload(Juego.consola_rel))
+        .where(Juego.perfil_id == perfil_id)
+        .where(Juego.id == juego_id)
+    )
+    result = await db.execute(query)
+    juego = result.scalars().all()
+    return juego
+
+@router.get("/loadgame/{perfil_id}/{juego_id}")
+async def load_game_retroarch(
+    juego_id: int, 
+    perfil_id: int, 
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    ### Obtener Catálogo Personal del Usuario
+    Recupera la lista de juegos vinculados a un perfil específico.
+
+    **Parámetros:**
+    - `juego_id` (path): ID único del juego.
+    - `perfil_id` (path): ID único del juego.
+
+    **Comportamiento:**
+    - Obtiene las rutas de rom y core del juego de un perfil e inicia Retroarch cargando el juego
+
+    **Respuesta:**
+    - JSON del juego iniciado
+    """
+    juego = await listar_juego_perfil(juego_id, perfil_id, db)
+    juego = juego[0]
+
+    core = juego.consola_rel.ruta_emulador
+    rom = juego.ruta_rom
+    rom = rom.replace(" ", "\ ").replace("(", "\(").replace(")", "\)")
+
+    run_command = f"flatpak run org.libretro.RetroArch -L {core} {rom}"
+    print(run_command)
+    subprocess.call(run_command, shell=True)
+
+    return juego
