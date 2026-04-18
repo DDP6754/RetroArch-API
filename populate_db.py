@@ -1,10 +1,8 @@
 import asyncio
 from sqlalchemy.future import select
 from database import AsyncSessionLocal, Consola, init_db
-RETRO_CONFIG = "~/.var/app/org.libretro.RetroArch/config/retroarch"
 CONSOLAS_INICIALES = [
-    {"console": "gba", "emulador": f"{RETRO_CONFIG}/cores/mgba_libretro.so"},
-
+    {"console": "gba", "emulador": "/ruta/emulador/gba"},
     {"console": "ds", "emulador": "/ruta/emulador/ds"},
     {"console": "gamecube", "emulador": "/ruta/emulador/gamecube"}
 ]
