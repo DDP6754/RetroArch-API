@@ -17,7 +17,7 @@ SISTEMAS_URLS = {
 
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
-@router.get("/scraper/buscar")
+@router.get("/scrapper/buscar")
 async def buscar_juegos_global(
     search: str = Query("", description="Buscar juego por nombre"),
     page: int = Query(1, ge=1),
