@@ -17,9 +17,9 @@ SISTEMAS_URLS = {
 
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
-@router.get("/scrapper/buscar")
+@router.get("/scraper/buscar")
 async def buscar_juegos_global(
-    search: str = Query(..., min_length=3),
+    search: str = Query("", description="Buscar juego por nombre"),
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100)
 ):
@@ -41,7 +41,7 @@ async def buscar_juegos_global(
                     if href and any(href.lower().endswith(e) for e in exts) and not href.startswith(('?', '/')):
                         nombre_limpio = unquote(href).rsplit('.', 1)[0]
                         
-                        if search.lower() in nombre_limpio.lower():
+                        if (search or "").lower() in nombre_limpio.lower():
                             resultados_globales.append({
                                 "nombre": nombre_limpio,
                                 "url_descarga": f"{url_base}{href}",
