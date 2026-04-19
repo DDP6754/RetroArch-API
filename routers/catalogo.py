@@ -223,7 +223,7 @@ async def load_game_retroarch(
     rom = juego.ruta_rom
     rom = rom.replace(" ", "\ ").replace("(", "\(").replace(")", "\)")
 
-    run_command = f"flatpak run org.libretro.RetroArch -L {core} {rom}"
+    run_command = f"flatpak run org.libretro.RetroArch -L {core} {rom} &"
     print(run_command)
     subprocess.call(run_command, shell=True)
 
