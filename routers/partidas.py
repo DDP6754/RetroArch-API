@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, UploadFile, File, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from database import AsyncSessionLocal, Save, Savestate
+import re
 
 router = APIRouter(prefix="/partidas", tags=["Gestión de Partidas"])
 
@@ -31,8 +32,9 @@ async def subir_save(
     
     *El sistema genera automáticamente un nombre único basado en el usuario y el juego.*
     """
-    nombre_archivo = f"user_{perfil_id}_game_{juego_id}.srm"
-    ruta_carpeta = "./storage/saves"
+    # nombre_archivo = f"user_{perfil_id}_game_{juego_id}.srm"
+    nombre_archivo = archivo.filename
+    ruta_carpeta = f"./storage/saves/{perfil_id}"
     os.makedirs(ruta_carpeta, exist_ok=True)
     ruta_fisica = os.path.join(ruta_carpeta, nombre_archivo)
     
@@ -73,6 +75,27 @@ async def subir_savestate(
     db.add(nuevo_state)
     await db.commit()
     return {"mensaje": "Savestate guardado", "ruta": ruta_fisica}
+
+@router.get("/loadsave/{perfil_id}", status_code=status.HTTP_200_OK)
+async def cargar_save(perfil_id: int, db: AsyncSession = Depends(get_db)):
+    """
+    **Establecer la ruta de saves para un usuario modificando retro_overr.cfg.**
+
+    Devuelve el estado de la petición.
+    """
+
+    # user_save = await db.execute(select(Save).filter(Save.perfil_id == perfil_id))
+    # if not user_save.scalars().all():
+    #     print("No existe el save del perfil: ", user_save.scalars().all())
+    with open("retro_overr.cfg", 'r') as f:
+        file_data = f.read()
+    file_data = re.sub('savefile_directory = "./storage/saves/\d/"', f'savefile_directory = "./storage/saves/{perfil_id}/"', file_data)
+    print(file_data)
+    with open("retro_overr.cfg", 'w') as f:
+        f.write(file_data)
+
+    return {"mensaje": "Save cargado"}
+
 
 @router.get("/usuario/{perfil_id}/saves")
 async def listar_mis_saves(perfil_id: int, db: AsyncSession = Depends(get_db)):

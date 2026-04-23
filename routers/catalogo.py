@@ -8,6 +8,7 @@ from pathlib import Path
 from database import AsyncSessionLocal, Consola, Juego
 import subprocess
 import os
+from .partidas import cargar_save
 
 router = APIRouter(tags=["Catalogo"])
 
@@ -203,28 +204,36 @@ async def load_game_retroarch(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    ### Obtener Catálogo Personal del Usuario
-    Recupera la lista de juegos vinculados a un perfil específico.
+    ### Lanza un juego determinado en un perfil con Retroarch con el save asociado.
 
     **Parámetros:**
     - `juego_id` (path): ID único del juego.
     - `perfil_id` (path): ID único del juego.
 
     **Comportamiento:**
-    - Obtiene las rutas de rom y core del juego de un perfil e inicia Retroarch cargando el juego
+    - Obtiene las rutas de rom y core del juego de un perfil e inicia Retroarch cargando el juego y sus saves
 
     **Respuesta:**
     - JSON del juego iniciado
     """
     juego = await listar_juego_perfil(juego_id, perfil_id, db)
-    juego = juego[0]
+    if juego:
+        juego = juego[0]
 
-    core = juego.consola_rel.ruta_emulador
-    rom = juego.ruta_rom
-    rom = rom.replace(" ", "\ ").replace("(", "\(").replace(")", "\)")
+        core = juego.consola_rel.ruta_emulador
+        rom = juego.ruta_rom
+        rom = rom.replace(" ", "\ ").replace("(", "\(").replace(")", "\)").replace("[", "\[").replace("]", "\]")
+    else:
+        raise HTTPException(status_code=404, detail="Item not found")
 
-    run_command = f"flatpak run org.libretro.RetroArch -L {core} {rom} &"
-    print(run_command)
-    subprocess.call(run_command, shell=True)
+    if rom != None and core != None:
+
+        await cargar_save(perfil_id, db)
+
+        run_command = f"flatpak run org.libretro.RetroArch --config ./retroarch.cfg --appendconfig=./retro_overr.cfg -L {core} {rom} &"
+        print(run_command)
+        subprocess.call(run_command, shell=True)
+    else:
+        raise HTTPException(status_code=404, detail="Item not found")
 
     return juego
