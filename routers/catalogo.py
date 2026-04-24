@@ -10,6 +10,8 @@ import subprocess
 import os
 from .partidas import cargar_save
 
+import shlex
+
 router = APIRouter(tags=["Catalogo"])
 
 UPLOAD_ROM_DIR = Path("./storage/roms")
@@ -222,7 +224,7 @@ async def load_game_retroarch(
 
         core = juego.consola_rel.ruta_emulador
         rom = juego.ruta_rom
-        rom = rom.replace(" ", "\ ").replace("(", "\(").replace(")", "\)").replace("[", "\[").replace("]", "\]")
+        rom = shlex.quote(rom)
     else:
         raise HTTPException(status_code=404, detail="Item not found")
 
@@ -230,9 +232,9 @@ async def load_game_retroarch(
 
         await cargar_save(perfil_id, db)
 
-        run_command = f"flatpak run org.libretro.RetroArch --config ./retroarch.cfg --appendconfig=./retro_overr.cfg -L {core} {rom} &"
+        run_command = f"DISPLAY=:0 flatpak run org.libretro.RetroArch --config ./retroarch.cfg --appendconfig=./retro_overr.cfg -L {core} {rom}"
         print(run_command)
-        subprocess.call(run_command, shell=True)
+        subprocess.Popen(run_command, shell=True)
     else:
         raise HTTPException(status_code=404, detail="Item not found")
 
