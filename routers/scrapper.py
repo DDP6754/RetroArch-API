@@ -3,9 +3,15 @@ import httpx
 from pathlib import Path
 from urllib.parse import unquote
 from sqlalchemy.future import select
-from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect, Depends, Header
 from database import AsyncSessionLocal, Juego, Consola
 from bs4 import BeautifulSoup
+from sqlalchemy.ext.asyncio import AsyncSession
+from typing import Optional
+
+async def get_db():
+    async with AsyncSessionLocal() as session:
+        yield session
 
 router = APIRouter(tags=["Scrapper"])
 
@@ -67,7 +73,13 @@ async def buscar_juegos_global(
     }
 
 @router.websocket("/ws/descargar/{consola_nombre}")
-async def websocket_descargar(websocket: WebSocket, consola_nombre: str):
+async def websocket_descargar(
+    websocket: WebSocket, 
+    consola_nombre: str, 
+    db: AsyncSession = Depends(get_db),
+    p_access_token_id: Optional[str] = Header(None, alias="P-Access-Token-Id"),
+    p_access_token: Optional[str] = Header(None, alias="P-Access-Token")
+):
     """WebSocket que evita descargas duplicadas usando el nombre del archivo original."""
     await websocket.accept()
     

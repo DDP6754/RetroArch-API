@@ -20,3 +20,5 @@ storage/games/states/*
 
 test.py
 test_db.ipynb
+
+storage/
